@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>太陽系九大行星 VR 冒險 (修復版)</title>
+    <meta name="description" content="專為國小學生設計的 Web VR 太陽系教學 - 自動縮放與互動">
+    <!-- 引入 A-Frame 核心庫 -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <!-- 引入面向攝影機的組件 -->
+    <script src="https://unpkg.com/aframe-look-at-component@0.8.0/dist/aframe-look-at-component.min.js"></script>
+
+    <script>
+      /**
+       * 自定義組件：chinese-label
+       * 透過 Canvas 繪製高解析度中文文字標籤
+       */
+      AFRAME.registerComponent('chinese-label', {
+        schema: {
+          text: {type: 'string', default: ''},
+          color: {type: 'string', default: 'white'},
+          bgColor: {type: 'string', default: 'rgba(0, 0, 0, 0.8)'},
+          fontSize: {type: 'number', default: 44},
+          width: {type: 'number', default: 640},
+          height: {type: 'number', default: 160}
+        },
+        init: function () {
+          this.canvas = document.createElement('canvas');
+          this.canvas.width = this.data.width;
+          this.canvas.height = this.data.height;
+          this.ctx = this.canvas.getContext('2d');
+          this.updateTexture();
+        },
+        updateTexture: function () {
+          const ctx = this.ctx;
+          const canvas = this.canvas;
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          
+          // 繪製背景 (修正 roundRect 鏈式調用錯誤)
+          ctx.fillStyle = this.data.bgColor;
+          if (ctx.roundRect) {
+            ctx.roundRect(0, 0, canvas.width, canvas.height, 20);
+          } else {
+            // 手動繪製圓角矩形作為回退方案
+            const r = 20;
+            const w = canvas.width;
+            const h = canvas.height;
+            ctx.beginPath();
+            ctx.moveTo(r, 0);
+            ctx.lineTo(w - r, 0);
+            ctx.quadraticCurveTo(w, 0, w, r);
+            ctx.lineTo(w, h - r);
+            ctx.quadraticCurveTo(w, h, w - r, h);
+            ctx.lineTo(r, h);
+            ctx.quadraticCurveTo(0, h, 0, h - r);
+            ctx.lineTo(0, r);
+            ctx.quadraticCurveTo(0, 0, r, 0);
+            ctx.closePath();
+          }
+          ctx.fill();
+          
+          // 繪製文字
+          ctx.font = `bold ${this.data.fontSize}px "Microsoft JhengHei", "sans-serif"`;
+          ctx.fillStyle = this.data.color;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(this.data.text, canvas.width / 2, canvas.height / 2);
+
+          this.el.setAttribute('geometry', {
+            primitive: 'plane',
+            width: this.data.width / 100,
+            height: this.data.height / 100
+          });
+          
+          this.el.setAttribute('material', {
+            src: canvas,
+            transparent: true,
+            shader: 'flat',
+            side: 'double'
+          });
+        }
+      });
+
+      /**
+       * 自定義組件：planet-zoom
+       * 核心功能：對準行星時拉近攝影機，移開後恢復。
+       */
+      AFRAME.registerComponent('planet-zoom', {
+        init: function () {
+          const el = this.el; 
+          const infoPanel = el.parentElement.querySelector('.info-panel');
+          const orbitContainer = el.closest('.orbit-container');
+          const rig = document.querySelector('#rig');
+          const defaultPos = { x: 0, y: 20, z: 45 }; 
+
+          el.addEventListener('mouseenter', () => {
+            if (orbitContainer) orbitContainer.pause();
+            if (infoPanel) infoPanel.setAttribute('visible', 'true');
+
+            const worldPos = new THREE.Vector3();
+            el.object3D.getWorldPosition(worldPos);
+
+            rig.setAttribute('animation', {
+              property: 'position',
+              to: `${worldPos.x} ${worldPos.y + 2} ${worldPos.z + 8}`,
+              dur: 1000,
+              easing: 'easeOutQuad'
+            });
+
+            el.setAttribute('animation__pulse', {
+              property: 'scale',
+              to: '1.1 1.1 1.1',
+              dur: 300
+            });
+          });
+
+          el.addEventListener('mouseleave', () => {
+            if (orbitContainer) orbitContainer.play();
+            if (infoPanel) infoPanel.setAttribute('visible', 'false');
+
+            rig.setAttribute('animation', {
+              property: 'position',
+              to: `${defaultPos.x} ${defaultPos.y} ${defaultPos.z}`,
+              dur: 800,
+              easing: 'easeInQuad'
+            });
+
+            el.setAttribute('animation__pulse', {
+              property: 'scale',
+              to: '1 1 1',
+              dur: 300
+            });
+          });
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <a-scene>
+      <a-assets>
+        <img id="star-texture" src="https://cdn.aframe.io/360-image-boilerplate/enroute/sky.jpg" crossorigin="anonymous">
+      </a-assets>
+
+      <a-sky src="#star-texture"></a-sky>
+      <a-light type="ambient" color="#AAA"></a-light>
+      <a-light type="point" intensity="2" position="0 0 0"></a-light>
+
+      <!-- 太陽 -->
+      <a-entity position="0 0 0">
+        <a-sphere radius="4" color="#FF4500" animation="property: rotation; to: 0 360 0; loop: true; dur: 20000; easing: linear"></a-sphere>
+        <a-entity chinese-label="text: 太陽 SUN; fontSize: 60; bgColor: transparent" position="0 5.5 0" look-at="[camera]"></a-entity>
+      </a-entity>
+
+      <!-- 水星 -->
+      <a-entity class="orbit-container" animation="property: rotation; to: 0 360 0; loop: true; dur: 8000; easing: linear">
+        <a-entity position="10 0 0">
+          <a-sphere radius="0.5" color="#A5A5A5" planet-zoom></a-sphere>
+          <a-entity class="info-panel" visible="false" position="0 2 0" look-at="[camera]"
+                    chinese-label="text: 水星：離太陽最近，跑得最快喔！; color: #ADFF2F"></a-entity>
+          <a-entity chinese-label="text: 水星; fontSize: 40; bgColor: transparent" position="0 0.8 0" look-at="[camera]"></a-entity>
+        </a-entity>
+        <a-ring color="#333" rotation="-90 0 0" radius-inner="9.98" radius-outer="10.02"></a-ring>
+      </a-entity>
+
+      <!-- 金星 -->
+      <a-entity class="orbit-container" animation="property: rotation; to: 0 360 0; loop: true; dur: 12000; easing: linear">
+        <a-entity position="14 0 0">
+          <a-sphere radius="0.8" color="#FFD700" planet-zoom></a-sphere>
+          <a-entity class="info-panel" visible="false" position="0 2.2 0" look-at="[camera]"
+                    chinese-label="text: 金星：太陽系最熱的行星，整天雲霧繚繞。; color: #FFD700"></a-entity>
+          <a-entity chinese-label="text: 金星; fontSize: 40; bgColor: transparent" position="0 1.2 0" look-at="[camera]"></a-entity>
+        </a-entity>
+        <a-ring color="#333" rotation="-90 0 0" radius-inner="13.98" radius-outer="14.02"></a-ring>
+      </a-entity>
+
+      <!-- 地球 -->
+      <a-entity class="orbit-container" animation="property: rotation; to: 0 360 0; loop: true; dur: 18000; easing: linear">
+        <a-entity position="18 0 0">
+          <a-sphere radius="1" color="#1E90FF" planet-zoom></a-sphere>
+          <a-entity class="info-panel" visible="false" position="0 2.5 0" look-at="[camera]"
+                    chinese-label="text: 地球：美麗的藍色星球，是我們唯一的家。; color: #1E90FF"></a-entity>
+          <a-entity chinese-label="text: 地球; fontSize: 40; bgColor: transparent" position="0 1.5 0" look-at="[camera]"></a-entity>
+        </a-entity>
+        <a-ring color="#333" rotation="-90 0 0" radius-inner="17.98" radius-outer="18.02"></a-ring>
+      </a-entity>
+
+      <!-- 火星 -->
+      <a-entity class="orbit-container" animation="property: rotation; to: 0 360 0; loop: true; dur: 24000; easing: linear">
+        <a-entity position="22 0 0">
+          <a-sphere radius="0.8" color="#FF6347" planet-zoom></a-sphere>
+          <a-entity class="info-panel" visible="false" position="0 2.2 0" look-at="[camera]"
+                    chinese-label="text: 火星：紅色的星球，有全太陽系最高的山！; color: #FF6347"></a-entity>
+          <a-entity chinese-label="text: 火星; fontSize: 40; bgColor: transparent" position="0 1.2 0" look-at="[camera]"></a-entity>
+        </a-entity>
+        <a-ring color="#333" rotation="-90 0 0" radius-inner="21.98" radius-outer="22.02"></a-ring>
+      </a-entity>
+
+      <!-- 木星 -->
+      <a-entity class="orbit-container" animation="property: rotation; to: 0 360 0; loop: true; dur: 35000; easing: linear">
+        <a-entity position="28 0 0">
+          <a-sphere radius="2.2" color="#DEB887" planet-zoom></a-sphere>
+          <a-entity class="info-panel" visible="false" position="0 4 0" look-at="[camera]"
+                    chinese-label="text: 木星：體積最大的行星，有個超大的「大紅斑」。; color: #F4A460"></a-entity>
+          <a-entity chinese-label="text: 木星; fontSize: 40; bgColor: transparent" position="0 2.5 0" look-at="[camera]"></a-entity>
+        </a-entity>
+        <a-ring color="#333" rotation="-90 0 0" radius-inner="27.98" radius-outer="28.02"></a-ring>
+      </a-entity>
+
+      <!-- 土星 -->
+      <a-entity class="orbit-container" animation="property: rotation; to: 0 360 0; loop: true; dur: 45000; easing: linear">
+        <a-entity position="36 0 0">
+          <a-sphere radius="1.8" color="#F0E68C" planet-zoom></a-sphere>
+          <a-ring color="#DAA520" rotation="80 0 0" radius-inner="2.2" radius-outer="3.5"></a-ring>
+          <a-entity class="info-panel" visible="false" position="0 4 0" look-at="[camera]"
+                    chinese-label="text: 土星：密度最低的行星，有著美麗的行星環。; color: #FFFACD"></a-entity>
+          <a-entity chinese-label="text: 土星; fontSize: 40; bgColor: transparent" position="0 2.2 0" look-at="[camera]"></a-entity>
+        </a-entity>
+        <a-ring color="#333" rotation="-90 0 0" radius-inner="35.98" radius-outer="36.02"></a-ring>
+      </a-entity>
+
+      <!-- 天王星 -->
+      <a-entity class="orbit-container" animation="property: rotation; to: 0 360 0; loop: true; dur: 55000; easing: linear">
+        <a-entity position="44 0 0">
+          <a-sphere radius="1.4" color="#AFEEEE" planet-zoom></a-sphere>
+          <a-ring color="#B5E3E3" rotation="20 0 0" radius-inner="1.8" radius-outer="2.2" opacity="0.5"></a-ring>
+          <a-entity class="info-panel" visible="false" position="0 3.5 0" look-at="[camera]"
+                    chinese-label="text: 天王星：躺著旋轉的冰巨星，表面非常寒冷。; color: #E0FFFF"></a-entity>
+          <a-entity chinese-label="text: 天王星; fontSize: 40; bgColor: transparent" position="0 1.8 0" look-at="[camera]"></a-entity>
+        </a-entity>
+        <a-ring color="#333" rotation="-90 0 0" radius-inner="43.98" radius-outer="44.02"></a-ring>
+      </a-entity>
+
+      <!-- 海王星 -->
+      <a-entity class="orbit-container" animation="property: rotation; to: 0 360 0; loop: true; dur: 65000; easing: linear">
+        <a-entity position="52 0 0">
+          <a-sphere radius="1.3" color="#4682B4" planet-zoom></a-sphere>
+          <a-entity class="info-panel" visible="false" position="0 3.5 0" look-at="[camera]"
+                    chinese-label="text: 海王星：離太陽最遠，大氣風速超級驚人。; color: #87CEFA"></a-entity>
+          <a-entity chinese-label="text: 海王星; fontSize: 40; bgColor: transparent" position="0 1.8 0" look-at="[camera]"></a-entity>
+        </a-entity>
+        <a-ring color="#333" rotation="-90 0 0" radius-inner="51.98" radius-outer="52.02"></a-ring>
+      </a-entity>
+
+      <!-- 冥王星 -->
+      <a-entity class="orbit-container" animation="property: rotation; to: 0 360 0; loop: true; dur: 75000; easing: linear">
+        <a-entity position="60 0 0">
+          <a-sphere radius="0.4" color="#D2B48C" planet-zoom></a-sphere>
+          <a-entity class="info-panel" visible="false" position="0 2.5 0" look-at="[camera]"
+                    chinese-label="text: 冥王星：遙遠的矮行星，表面覆蓋著冰雪。; color: #D2B48C"></a-entity>
+          <a-entity chinese-label="text: 冥王星; fontSize: 40; bgColor: transparent" position="0 0.8 0" look-at="[camera]"></a-entity>
+        </a-entity>
+        <a-ring color="#333" rotation="-90 0 0" radius-inner="59.98" radius-outer="60.02"></a-ring>
+      </a-entity>
+
+      <a-entity id="rig" position="0 20 45" rotation="-25 0 0">
+        <a-camera id="camera">
+          <a-cursor fuse="true" 
+                    fuse-timeout="600" 
+                    color="#FF0000" 
+                    raycaster="objects: a-sphere"
+                    animation__fusing="property: scale; from: 1 1 1; to: 0.1 0.1 0.1; dur: 600; startEvents: fusing"
+                    animation__mouseleave="property: scale; to: 1 1 1; dur: 100; startEvents: mouseleave">
+          </a-cursor>
+        </a-camera>
+      </a-entity>
+
+      <a-entity chinese-label="text: 請將紅點對準行星，我會帶你飛過去看它喔！; fontSize: 32" position="0 30 10" look-at="[camera]"></a-entity>
+
+    </a-scene>
+  </body>
+</html>
